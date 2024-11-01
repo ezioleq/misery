@@ -128,6 +128,27 @@ mod tests {
     use super::*;
 
     #[test]
+    fn decode_trailing_zeroes_without_payload() {
+        let data: &[u8] = &[0xFE, 0x00, 0x00, 0x00];
+
+        let packet = Packet::try_from(data).unwrap();
+
+        assert!(matches!(packet, Packet::ServerListPing { .. }))
+    }
+
+    #[test]
+    fn decode_trailing_zeroes_with_payload() {
+        let data: &[u8] = &[0x00, 0x00, 0x00, 0x00, 0x11, 0x00, 0x00, 0x00, 0x00];
+
+        let packet = Packet::try_from(data).unwrap();
+
+        assert!(matches!(
+            packet,
+            Packet::KeepAlive(KeepAlivePacket { keep_alive_id: 17 })
+        ))
+    }
+
+    #[test]
     fn decode_keep_alive_packet() {
         let data: &[u8] = &[0x00, 0x00, 0x00, 0x00, 0x11];
 
