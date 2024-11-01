@@ -43,19 +43,24 @@ pub trait ToBytes {
 
 fn read_string(bytes: &mut Cursor<&[u8]>) -> io::Result<String> {
     let length = bytes.get_u16() as usize;
-    let mut utf8_data = Vec::with_capacity(length);
+    let mut utf16_data = Vec::with_capacity(length);
+
     for _ in 0..length {
-        utf8_data.push(bytes.get_u8());
+        utf16_data.push(bytes.get_u16());
     }
-    String::from_utf8(utf8_data)
-        .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "Invalid UTF-8 data"))
+
+    String::from_utf16(&utf16_data)
+        .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "Invalid UTF-16 data"))
 }
 
 fn put_string(buffer: &mut BytesMut, s: &str) -> io::Result<()> {
-    buffer.put_u16(s.len() as u16);
-    for utf8_char in s.chars() {
-        buffer.put_u8(utf8_char as u8);
+    let utf16_data: Vec<u16> = s.encode_utf16().collect();
+    buffer.put_u16(s.chars().count() as u16);
+
+    for utf16_char in utf16_data {
+        buffer.put_u16(utf16_char);
     }
+
     Ok(())
 }
 
@@ -180,7 +185,7 @@ mod tests {
 
     #[test]
     fn decode_disconnect_kick_packet() {
-        let data: &[u8] = &[0xFF, 0x00, 0x01, 0x41];
+        let data: &[u8] = &[0xFF, 0x00, 0x01, 0x00, 0x41];
 
         let packet = Packet::try_from(data).unwrap();
 
@@ -200,6 +205,30 @@ mod tests {
 
         let data = packet.to_bytes().unwrap();
 
-        assert_eq!(&data[..], &[0xFFu8, 0x00, 0x01, 0x41])
+        assert_eq!(&data[..], &[0xFFu8, 0x00, 0x01, 0x00, 0x41])
+    }
+
+    #[test]
+    fn encode_disconnect_server_status_packet() {
+        let expected_data = &[
+            0xFFu8, // disconnect packet type
+            0x00, 0x08, // string length
+            0x00, 0x45, // E
+            0x00, 0x5A, // Z
+            0x00, 0x49, // I
+            0x00, 0x4F, // O
+            0x00, 0xA7, // §
+            0x00, 0x34, // 4
+            0x00, 0xA7, // §
+            0x00, 0x34, // 4
+        ];
+
+        let packet = DisconnectKickPacket {
+            reason: "EZIO§4§4".to_string(),
+        };
+
+        let data = packet.to_bytes().unwrap();
+
+        assert_eq!(&data[..], expected_data)
     }
 }
