@@ -181,7 +181,7 @@ impl FromBytes for DisconnectKickPayload {
 
 impl ToBytes for DisconnectKickPayload {
     fn to_bytes(&self) -> io::Result<BytesMut> {
-        let mut buffer = BytesMut::with_capacity(1 + self.reason.len() * 2 + 2);
+        let mut buffer = BytesMut::with_capacity(1 + 2 + self.reason.chars().count() * 2);
         buffer.put_u8(DISCONNECT_KICK_PACKET_ID);
         put_string(&mut buffer, &self.reason)?;
         Ok(buffer)
@@ -255,7 +255,7 @@ mod tests {
 
     #[test]
     fn decode_disconnect_kick_packet() {
-        let data: &[u8] = &[DISCONNECT_KICK_PACKET_ID, 0x00, 0x01, 0x00, 0x41];
+        let data: &[u8] = &[DISCONNECT_KICK_PACKET_ID, 0x00, 0x01, 0x00, b'A'];
 
         let packet = Packet::try_from(data).unwrap();
 
@@ -277,7 +277,7 @@ mod tests {
 
         assert_eq!(
             &data[..],
-            &[DISCONNECT_KICK_PACKET_ID, 0x00, 0x01, 0x00, 0x41]
+            &[DISCONNECT_KICK_PACKET_ID, 0x00, 0x01, 0x00, b'A']
         )
     }
 
