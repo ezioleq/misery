@@ -4,6 +4,8 @@ use bytes::{Buf, BufMut, BytesMut};
 
 /// Keep alive packet identifier.
 const KEEP_ALIVE_PACKET_ID: u8 = 0x00;
+/// Handshake packet identifier.
+const HANDSHAKE_PACKET_ID: u8 = 0x02;
 /// Server list ping packet identifier.
 const SERVER_LIST_PING_PACKET_ID: u8 = 0xFE;
 /// Disconnect/Kick packet identifier.
@@ -14,6 +16,9 @@ const DISCONNECT_KICK_PACKET_ID: u8 = 0xFF;
 pub enum Packet {
     /// Two-way, Keep Alive packet.
     KeepAlive(KeepAlivePayload),
+
+    /// Two-way, Handshake packet.
+    Handshake(HandshakePayload),
 
     /// Client to Server, Server List Ping packet.
     ServerListPing(ServerListPingPayload),
@@ -32,6 +37,9 @@ impl TryFrom<&[u8]> for Packet {
 
         match packet_id {
             KEEP_ALIVE_PACKET_ID => Ok(Packet::KeepAlive(KeepAlivePayload::from_bytes(
+                &mut cursor,
+            )?)),
+            HANDSHAKE_PACKET_ID => Ok(Packet::Handshake(HandshakePayload::from_bytes(
                 &mut cursor,
             )?)),
             SERVER_LIST_PING_PACKET_ID => Ok(Packet::ServerListPing(
@@ -148,6 +156,37 @@ impl ToBytes for KeepAlivePayload {
 }
 
 //
+// Handshake packet
+//
+
+#[derive(Debug, PartialEq)]
+pub struct HandshakePayload {
+    /// # Client to Server
+    /// The data is username and host, for example `ezioleq;localhost:25565`.
+    ///
+    /// # Server to Client
+    /// The data is a connection hash, for example `2e69f1dc002ab5f7`.
+    pub data: String,
+}
+
+impl FromBytes for HandshakePayload {
+    fn from_bytes(bytes: &mut Cursor<&[u8]>) -> io::Result<Self> {
+        Ok(Self {
+            data: read_string(bytes)?,
+        })
+    }
+}
+
+impl ToBytes for HandshakePayload {
+    fn to_bytes(&self) -> io::Result<BytesMut> {
+        let mut buffer = BytesMut::with_capacity(3 + self.data.chars().count() * 2);
+        buffer.put_u8(HANDSHAKE_PACKET_ID);
+        put_string(&mut buffer, &self.data)?;
+        Ok(buffer)
+    }
+}
+
+//
 // Server list ping packet
 //
 
@@ -188,6 +227,7 @@ impl ToBytes for DisconnectKickPayload {
     }
 }
 
+// I don't know if it's a good way of unit testing, but so far it works.
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -242,6 +282,54 @@ mod tests {
         let data = packet.to_bytes().unwrap();
 
         assert_eq!(&data[..], &[KEEP_ALIVE_PACKET_ID, 0x00, 0x00, 0x00, 0x11]);
+    }
+
+    #[test]
+    fn decode_handshake_packet() {
+        let data: &[u8] = &[
+            HANDSHAKE_PACKET_ID,
+            0x00,
+            0x03,
+            0x00,
+            0x65,
+            0x00,
+            0x3B,
+            0x00,
+            0x31,
+        ];
+
+        let packet = Packet::try_from(data).unwrap();
+
+        assert_eq!(
+            packet,
+            Packet::Handshake(HandshakePayload {
+                data: "e;1".to_string()
+            })
+        )
+    }
+
+    #[test]
+    fn encode_handshake_packet() {
+        let packet = HandshakePayload {
+            data: "e;1".to_string(),
+        };
+
+        let data = packet.to_bytes().unwrap();
+
+        assert_eq!(
+            data.as_ref(),
+            &[
+                HANDSHAKE_PACKET_ID,
+                0x00,
+                0x03,
+                0x00,
+                0x65,
+                0x00,
+                0x3B,
+                0x00,
+                0x31
+            ]
+        );
     }
 
     #[test]
