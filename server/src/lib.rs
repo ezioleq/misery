@@ -1,5 +1,5 @@
-use log::{debug, info};
-use protocol::packet::{DisconnectKickPacket, Packet, ToBytes};
+use log::{debug, error, info};
+use protocol::packet::{DisconnectKickPayload, Packet, ToBytes};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpListener,
@@ -34,20 +34,20 @@ pub async fn start_server() {
                     Packet::ServerListPing(_) => {
                         debug!("Received server ping packet!");
 
-                        let packet = DisconnectKickPacket {
+                        let payload = DisconnectKickPayload {
                             reason: "A Minecraft Server§0§20".to_string(),
                         }
                         .to_bytes()
                         .unwrap();
 
-                        debug!("Sending status packet: {:?}", packet.as_ref() as &[u8]);
+                        debug!("Sending status packet: {:?}", payload.as_ref() as &[u8]);
 
                         socket
-                            .write_all(packet.as_ref())
+                            .write_all(payload.as_ref())
                             .await
                             .expect("Failed to write data to socket");
                     }
-                    _ => panic!("uh nuh"),
+                    _ => error!("Unhandled packet type"),
                 }
             }
         });
