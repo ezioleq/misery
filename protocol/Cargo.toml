@@ -5,6 +5,3 @@ edition = "2021"
 
 [dependencies]
 bytes = { version = "1.8.0" }
-
-[dev-dependencies]
-matches = "0.1.10"

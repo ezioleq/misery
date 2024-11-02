@@ -438,45 +438,35 @@ mod tests {
 
     #[test]
     fn decode_trailing_zeroes_without_payload() {
-        let data: &[u8] = &[SERVER_LIST_PING_PACKET_ID, 0x00, 0x00, 0x00];
+        let data: &[u8] = &[0xFE, 0x00, 0x00, 0x00];
 
         let packet = Packet::try_from(data).unwrap();
 
-        assert!(matches!(packet, Packet::ServerListPing { .. }))
+        assert_eq!(packet, Packet::ServerListPing(ServerListPingPayload {}));
     }
 
     #[test]
     fn decode_trailing_zeroes_with_payload() {
-        let data: &[u8] = &[
-            KEEP_ALIVE_PACKET_ID,
-            0x00,
-            0x00,
-            0x00,
-            0x11,
-            0x00,
-            0x00,
-            0x00,
-            0x00,
-        ];
+        let data: &[u8] = &[0x00, 0x00, 0x00, 0x00, 0x11, 0x00, 0x00, 0x00, 0x00];
 
         let packet = Packet::try_from(data).unwrap();
 
-        assert!(matches!(
+        assert_eq!(
             packet,
             Packet::KeepAlive(KeepAlivePayload { keep_alive_id: 17 })
-        ))
+        );
     }
 
     #[test]
     fn decode_keep_alive_packet() {
-        let data: &[u8] = &[KEEP_ALIVE_PACKET_ID, 0x00, 0x00, 0x00, 0x11];
+        let data: &[u8] = &[0x00, 0x00, 0x00, 0x00, 0x11];
 
         let packet = Packet::try_from(data).unwrap();
 
-        assert!(matches!(
+        assert_eq!(
             packet,
             Packet::KeepAlive(KeepAlivePayload { keep_alive_id: 17 })
-        ))
+        );
     }
 
     #[test]
@@ -485,33 +475,14 @@ mod tests {
 
         let data = packet.to_bytes().unwrap();
 
-        assert_eq!(&data[..], &[KEEP_ALIVE_PACKET_ID, 0x00, 0x00, 0x00, 0x11]);
+        assert_eq!(data.as_ref(), &[0x00, 0x00, 0x00, 0x00, 0x11]);
     }
 
     #[test]
     fn decode_login_request_packet() {
         let data: &[u8] = &[
-            LOGIN_REQUEST_PACKET_ID,
-            0x00,
-            0x00,
-            0x00,
-            0x1D,
-            0x00,
-            0x01,
-            0x00,
-            0x65,
-            0x00,
-            0x00,
-            0x00,
-            0x00,
-            0x00,
-            0x00,
-            0x00,
-            0x00,
-            0x00,
-            0x00,
-            0x00,
-            0x00,
+            0x01, 0x00, 0x00, 0x00, 0x1D, 0x00, 0x01, 0x00, 0x65, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         ];
 
         let packet = Packet::try_from(data).unwrap();
@@ -549,51 +520,15 @@ mod tests {
         assert_eq!(
             data.as_ref(),
             &[
-                LOGIN_REQUEST_PACKET_ID,
-                0x00,
-                0x00,
-                0x04,
-                0xD2,
-                0x00,
-                0x00,
-                0x00,
-                0x04,
-                0x00,
-                0x46,
-                0x00,
-                0x4C,
-                0x00,
-                0x41,
-                0x00,
-                0x54,
-                0x00,
-                0x00,
-                0x00,
-                0x01,
-                0x00,
-                0x00,
-                0x00,
-                0x00,
-                0x00,
-                0x00,
-                0x05,
+                0x01, 0x00, 0x00, 0x04, 0xD2, 0x00, 0x00, 0x00, 0x04, 0x00, 0x46, 0x00, 0x4C, 0x00,
+                0x41, 0x00, 0x54, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x05,
             ]
         )
     }
 
     #[test]
     fn decode_handshake_packet() {
-        let data: &[u8] = &[
-            HANDSHAKE_PACKET_ID,
-            0x00,
-            0x03,
-            0x00,
-            0x65,
-            0x00,
-            0x3B,
-            0x00,
-            0x31,
-        ];
+        let data: &[u8] = &[0x02, 0x00, 0x03, 0x00, 0x65, 0x00, 0x3B, 0x00, 0x31];
 
         let packet = Packet::try_from(data).unwrap();
 
@@ -615,65 +550,15 @@ mod tests {
 
         assert_eq!(
             data.as_ref(),
-            &[
-                HANDSHAKE_PACKET_ID,
-                0x00,
-                0x03,
-                0x00,
-                0x65,
-                0x00,
-                0x3B,
-                0x00,
-                0x31
-            ]
+            &[0x02, 0x00, 0x03, 0x00, 0x65, 0x00, 0x3B, 0x00, 0x31]
         );
     }
 
     #[test]
     fn decode_player_position_and_look_packet() {
         let data: &[u8] = &[
-            PLAYER_POSITION_AND_LOOK_PACKET_ID,
-            64,
-            33,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            64,
-            80,
-            64,
-            0,
-            0,
-            0,
-            0,
-            0,
-            64,
-            80,
-            167,
-            174,
-            20,
-            128,
-            0,
-            0,
-            64,
-            33,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            195,
-            52,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
+            0x0D, 64, 33, 0, 0, 0, 0, 0, 0, 64, 80, 64, 0, 0, 0, 0, 0, 64, 80, 167, 174, 20, 128,
+            0, 0, 64, 33, 0, 0, 0, 0, 0, 0, 195, 52, 0, 0, 0, 0, 0, 0, 0,
         ];
 
         let packet = Packet::try_from(data).unwrap();
@@ -711,64 +596,25 @@ mod tests {
         assert_eq!(
             data.as_ref(),
             &[
-                PLAYER_POSITION_AND_LOOK_PACKET_ID,
-                64,
-                33,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                64,
-                80,
-                64,
-                0,
-                0,
-                0,
-                0,
-                0,
-                64,
-                80,
-                167,
-                174,
-                20,
-                128,
-                0,
-                0,
-                64,
-                33,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                195,
-                52,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
+                0x0D, 0x40, 0x21, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x50, 0x40, 0x00, 0x00,
+                0x00, 0x00, 0x00, 0x40, 0x50, 0xA7, 0xAE, 0x14, 0x80, 0x00, 0x00, 0x40, 0x21, 0x00,
+                0x00, 0x00, 0x00, 0x00, 0x00, 0xC3, 0x34, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
             ]
         );
     }
 
     #[test]
     fn decode_server_list_ping_packet() {
-        let data: &[u8] = &[SERVER_LIST_PING_PACKET_ID];
+        let data: &[u8] = &[0xFE];
 
         let packet = Packet::try_from(data).unwrap();
 
-        assert!(matches!(packet, Packet::ServerListPing { .. }))
+        assert_eq!(packet, Packet::ServerListPing(ServerListPingPayload {}));
     }
 
     #[test]
     fn decode_disconnect_kick_packet() {
-        let data: &[u8] = &[DISCONNECT_KICK_PACKET_ID, 0x00, 0x01, 0x00, b'A'];
+        let data: &[u8] = &[0xFF, 0x00, 0x01, 0x00, b'A'];
 
         let packet = Packet::try_from(data).unwrap();
 
@@ -788,34 +634,14 @@ mod tests {
 
         let data = packet.to_bytes().unwrap();
 
-        assert_eq!(
-            &data[..],
-            &[DISCONNECT_KICK_PACKET_ID, 0x00, 0x01, 0x00, b'A']
-        )
+        assert_eq!(data.as_ref(), &[0xFF, 0x00, 0x01, 0x00, b'A'])
     }
 
     #[test]
     fn encode_disconnect_server_status_packet() {
         let expected_data = &[
-            DISCONNECT_KICK_PACKET_ID,
-            0x00,
-            0x08, // string length
-            0x00,
-            0x45, // E
-            0x00,
-            0x5A, // Z
-            0x00,
-            0x49, // I
-            0x00,
-            0x4F, // O
-            0x00,
-            0xA7, // §
-            0x00,
-            0x34, // 4
-            0x00,
-            0xA7, // §
-            0x00,
-            0x34, // 4
+            0xFF, 0x00, 0x08, 0x00, 0x45, 0x00, 0x5A, 0x00, 0x49, 0x00, 0x4F, 0x00, 0xA7, 0x00,
+            0x34, 0x00, 0xA7, 0x00, 0x34,
         ];
 
         let packet = DisconnectKickPayload {
@@ -824,6 +650,6 @@ mod tests {
 
         let data = packet.to_bytes().unwrap();
 
-        assert_eq!(&data[..], expected_data)
+        assert_eq!(data.as_ref(), expected_data)
     }
 }
