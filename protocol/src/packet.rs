@@ -4,6 +4,8 @@ use bytes::{Buf, BufMut, BytesMut};
 
 /// Keep alive packet identifier.
 const KEEP_ALIVE_PACKET_ID: u8 = 0x00;
+/// Login request identifier.
+const LOGIN_REQUEST_PACKET_ID: u8 = 0x01;
 /// Handshake packet identifier.
 const HANDSHAKE_PACKET_ID: u8 = 0x02;
 /// Server list ping packet identifier.
@@ -16,6 +18,9 @@ const DISCONNECT_KICK_PACKET_ID: u8 = 0xFF;
 pub enum Packet {
     /// Two-way, Keep Alive packet.
     KeepAlive(KeepAlivePayload),
+
+    /// Two-way, Login request packet.
+    LoginRequest(LoginRequestPayload),
 
     /// Two-way, Handshake packet.
     Handshake(HandshakePayload),
@@ -37,6 +42,9 @@ impl TryFrom<&[u8]> for Packet {
 
         match packet_id {
             KEEP_ALIVE_PACKET_ID => Ok(Packet::KeepAlive(KeepAlivePayload::from_bytes(
+                &mut cursor,
+            )?)),
+            LOGIN_REQUEST_PACKET_ID => Ok(Packet::LoginRequest(LoginRequestPayload::from_bytes(
                 &mut cursor,
             )?)),
             HANDSHAKE_PACKET_ID => Ok(Packet::Handshake(HandshakePayload::from_bytes(
@@ -156,16 +164,110 @@ impl ToBytes for KeepAlivePayload {
 }
 
 //
+// Login request packet
+//
+
+/// Payload for the `Packet::LoginRequest`.
+#[derive(Debug, PartialEq)]
+pub struct LoginRequestPayload {
+    /// # Client to Server
+    /// The `id` is the protocol version, for 1.2.5 it should be equal to `29`.
+    ///
+    /// # Server to Client
+    /// The `id` is the player's entity identifier.
+    pub id: i32,
+
+    /// # Client to Server
+    /// Player's username.
+    ///
+    /// # Server to Client
+    /// Not used.
+    pub username: String,
+
+    /// # Client to Server
+    /// Not used, should be empty string.
+    ///
+    /// # Server to Client
+    /// Level type defined in server properties, `default` or `FLAT`.
+    pub level_type: String,
+
+    /// # Client to Server
+    /// Not used.
+    ///
+    /// # Server to Client
+    /// Server mode, `0` for survival, `1` for creative.
+    pub server_mode: i32,
+
+    /// # Client to Server
+    /// Not used.
+    ///
+    /// # Server to Client
+    /// Dimension, `-1` for Nether, `0` for The Overworld, `1` for The End.
+    pub dimension: i32,
+
+    /// # Client to Server
+    /// Not used.
+    ///
+    /// # Server to Client
+    /// Difficulty, `0` for Peaceful, `1` for Easy, `2` for Normal, `3` for Hard.
+    pub difficulty: i8,
+
+    /// Unused, should be `0`. Previously was a world height.
+    pub unused_0: u8,
+
+    /// # Client to Server
+    /// Unused.
+    ///
+    /// # Server to Client
+    /// Max players count, used by the client to draw the player list.
+    pub max_players: u8,
+}
+
+impl FromBytes for LoginRequestPayload {
+    fn from_bytes(bytes: &mut Cursor<&[u8]>) -> io::Result<Self> {
+        Ok(Self {
+            id: bytes.get_i32(),
+            username: read_string(bytes)?,
+            level_type: read_string(bytes)?,
+            server_mode: bytes.get_i32(),
+            dimension: bytes.get_i32(),
+            difficulty: bytes.get_i8(),
+            unused_0: 0,
+            max_players: bytes.get_u8(),
+        })
+    }
+}
+
+impl ToBytes for LoginRequestPayload {
+    fn to_bytes(&self) -> io::Result<BytesMut> {
+        let mut buffer = BytesMut::with_capacity(
+            20 + self.username.chars().count() * 2 + self.level_type.chars().count() * 2,
+        );
+        buffer.put_u8(LOGIN_REQUEST_PACKET_ID);
+        buffer.put_i32(self.id);
+        put_string(&mut buffer, &self.username)?;
+        put_string(&mut buffer, &self.level_type)?;
+        buffer.put_i32(self.server_mode);
+        buffer.put_i32(self.dimension);
+        buffer.put_i8(self.difficulty);
+        buffer.put_u8(self.unused_0);
+        buffer.put_u8(self.max_players);
+        Ok(buffer)
+    }
+}
+
+//
 // Handshake packet
 //
 
+/// Payload for the `Packet::Handshake`.
 #[derive(Debug, PartialEq)]
 pub struct HandshakePayload {
     /// # Client to Server
-    /// The data is username and host, for example `ezioleq;localhost:25565`.
+    /// The `data` is username and host, for example `ezioleq;localhost:25565`.
     ///
     /// # Server to Client
-    /// The data is a connection hash, for example `2e69f1dc002ab5f7`.
+    /// The `data` is a connection hash, for example `2e69f1dc002ab5f7`.
     pub data: String,
 }
 
@@ -282,6 +384,99 @@ mod tests {
         let data = packet.to_bytes().unwrap();
 
         assert_eq!(&data[..], &[KEEP_ALIVE_PACKET_ID, 0x00, 0x00, 0x00, 0x11]);
+    }
+
+    #[test]
+    fn decode_login_request_packet() {
+        let data: &[u8] = &[
+            LOGIN_REQUEST_PACKET_ID,
+            0x00,
+            0x00,
+            0x00,
+            0x1D,
+            0x00,
+            0x01,
+            0x00,
+            0x65,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+        ];
+
+        let packet = Packet::try_from(data).unwrap();
+
+        assert_eq!(
+            packet,
+            Packet::LoginRequest(LoginRequestPayload {
+                id: 29,
+                username: "e".to_string(),
+                level_type: "".to_string(),
+                server_mode: 0,
+                dimension: 0,
+                difficulty: 0,
+                unused_0: 0,
+                max_players: 0
+            })
+        )
+    }
+
+    #[test]
+    fn encode_login_request_packet() {
+        let packet = LoginRequestPayload {
+            id: 1234,
+            username: "".to_string(),
+            level_type: "FLAT".to_string(),
+            server_mode: 1,
+            dimension: 0,
+            difficulty: 0,
+            unused_0: 0,
+            max_players: 5,
+        };
+
+        let data = packet.to_bytes().unwrap();
+
+        assert_eq!(
+            data.as_ref(),
+            &[
+                LOGIN_REQUEST_PACKET_ID,
+                0x00,
+                0x00,
+                0x04,
+                0xD2,
+                0x00,
+                0x00,
+                0x00,
+                0x04,
+                0x00,
+                0x46,
+                0x00,
+                0x4C,
+                0x00,
+                0x41,
+                0x00,
+                0x54,
+                0x00,
+                0x00,
+                0x00,
+                0x01,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x05,
+            ]
+        )
     }
 
     #[test]
