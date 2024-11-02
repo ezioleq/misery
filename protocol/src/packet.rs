@@ -8,6 +8,8 @@ const KEEP_ALIVE_PACKET_ID: u8 = 0x00;
 const LOGIN_REQUEST_PACKET_ID: u8 = 0x01;
 /// Handshake packet identifier.
 const HANDSHAKE_PACKET_ID: u8 = 0x02;
+/// Player position and look packet identifier.
+const PLAYER_POSITION_AND_LOOK_PACKET_ID: u8 = 0x0D;
 /// Server list ping packet identifier.
 const SERVER_LIST_PING_PACKET_ID: u8 = 0xFE;
 /// Disconnect/Kick packet identifier.
@@ -24,6 +26,9 @@ pub enum Packet {
 
     /// Two-way, Handshake packet.
     Handshake(HandshakePayload),
+
+    /// Two-way, Player position and look packet.
+    PlayerPositionAndLook(PlayerPositionAndLookPayload),
 
     /// Client to Server, Server List Ping packet.
     ServerListPing(ServerListPingPayload),
@@ -50,6 +55,9 @@ impl TryFrom<&[u8]> for Packet {
             HANDSHAKE_PACKET_ID => Ok(Packet::Handshake(HandshakePayload::from_bytes(
                 &mut cursor,
             )?)),
+            PLAYER_POSITION_AND_LOOK_PACKET_ID => Ok(Packet::PlayerPositionAndLook(
+                PlayerPositionAndLookPayload::from_bytes(&mut cursor)?,
+            )),
             SERVER_LIST_PING_PACKET_ID => Ok(Packet::ServerListPing(
                 ServerListPingPayload::from_bytes(&mut cursor)?,
             )),
@@ -284,6 +292,72 @@ impl ToBytes for HandshakePayload {
         let mut buffer = BytesMut::with_capacity(3 + self.data.chars().count() * 2);
         buffer.put_u8(HANDSHAKE_PACKET_ID);
         put_string(&mut buffer, &self.data)?;
+        Ok(buffer)
+    }
+}
+
+//
+// Player position and look packet
+//
+
+/// Payload for the `Packet::PlayerPositionAndLook`.
+#[derive(Debug, PartialEq)]
+pub struct PlayerPositionAndLookPayload {
+    /// Absolute X position.
+    pub x: f64,
+
+    /// # Client to Server
+    /// Absolute Y position.
+    ///
+    /// # Server to Client
+    /// Stance used to modify the player's bounding box.
+    pub stance_y_0: f64,
+
+    /// # Client to Server
+    /// Stance used to modify the player's bounding box.
+    ///
+    /// # Server to Client
+    /// Absolute Y position.
+    pub stance_y_1: f64,
+
+    /// Absolute Z position.
+    pub z: f64,
+
+    /// Absolute rotation on the X axis.
+    pub yaw: f32,
+
+    /// Absolute rotation on the Y axis.
+    pub pitch: f32,
+
+    /// Whether the client is on the ground.
+    pub on_ground: u8,
+}
+
+impl FromBytes for PlayerPositionAndLookPayload {
+    fn from_bytes(bytes: &mut Cursor<&[u8]>) -> io::Result<Self> {
+        Ok(Self {
+            x: bytes.get_f64(),
+            stance_y_0: bytes.get_f64(),
+            stance_y_1: bytes.get_f64(),
+            z: bytes.get_f64(),
+            yaw: bytes.get_f32(),
+            pitch: bytes.get_f32(),
+            on_ground: bytes.get_u8(),
+        })
+    }
+}
+
+impl ToBytes for PlayerPositionAndLookPayload {
+    fn to_bytes(&self) -> io::Result<BytesMut> {
+        let mut buffer = BytesMut::with_capacity(42);
+        buffer.put_u8(PLAYER_POSITION_AND_LOOK_PACKET_ID);
+        buffer.put_f64(self.x);
+        buffer.put_f64(self.stance_y_0);
+        buffer.put_f64(self.stance_y_1);
+        buffer.put_f64(self.z);
+        buffer.put_f32(self.yaw);
+        buffer.put_f32(self.pitch);
+        buffer.put_u8(self.on_ground);
         Ok(buffer)
     }
 }
@@ -551,6 +625,134 @@ mod tests {
                 0x3B,
                 0x00,
                 0x31
+            ]
+        );
+    }
+
+    #[test]
+    fn decode_player_position_and_look_packet() {
+        let data: &[u8] = &[
+            PLAYER_POSITION_AND_LOOK_PACKET_ID,
+            64,
+            33,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            64,
+            80,
+            64,
+            0,
+            0,
+            0,
+            0,
+            0,
+            64,
+            80,
+            167,
+            174,
+            20,
+            128,
+            0,
+            0,
+            64,
+            33,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            195,
+            52,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+        ];
+
+        let packet = Packet::try_from(data).unwrap();
+
+        assert_eq!(
+            packet,
+            Packet::PlayerPositionAndLook(PlayerPositionAndLookPayload {
+                x: 8.5,
+                stance_y_0: 65.0,
+                stance_y_1: 66.62000000476837,
+                z: 8.5,
+                yaw: -180.0,
+                pitch: 0.0,
+                on_ground: 0
+            })
+        );
+
+        println!("{:?}", packet)
+    }
+
+    #[test]
+    fn encode_player_position_and_look_packet() {
+        let packet = PlayerPositionAndLookPayload {
+            x: 8.5,
+            stance_y_0: 65.0,
+            stance_y_1: 66.62000000476837,
+            z: 8.5,
+            yaw: -180.0,
+            pitch: 0.0,
+            on_ground: 0,
+        };
+
+        let data = packet.to_bytes().unwrap();
+
+        assert_eq!(
+            data.as_ref(),
+            &[
+                PLAYER_POSITION_AND_LOOK_PACKET_ID,
+                64,
+                33,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                64,
+                80,
+                64,
+                0,
+                0,
+                0,
+                0,
+                0,
+                64,
+                80,
+                167,
+                174,
+                20,
+                128,
+                0,
+                0,
+                64,
+                33,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                195,
+                52,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
             ]
         );
     }
