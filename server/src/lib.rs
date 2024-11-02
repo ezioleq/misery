@@ -1,5 +1,7 @@
 use log::{debug, error, info};
-use protocol::packet::{DisconnectKickPayload, HandshakePayload, Packet, ToBytes};
+use protocol::packet::{
+    DisconnectKickPayload, HandshakePayload, LoginRequestPayload, Packet, ToBytes,
+};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpListener,
@@ -28,7 +30,7 @@ pub async fn start_server() {
 
                 debug!("Received packet: {:?}", buf);
 
-                let packet = Packet::try_from(&buf[..]).unwrap();
+                let packet = Packet::try_from(buf.as_ref()).unwrap();
 
                 match packet {
                     Packet::ServerListPing(_) => {
@@ -40,7 +42,7 @@ pub async fn start_server() {
                         .to_bytes()
                         .unwrap();
 
-                        debug!("Sending status packet: {:?}", payload.as_ref() as &[u8]);
+                        debug!("Sending status packet: {:?}", payload.as_ref());
 
                         socket
                             .write_all(payload.as_ref())
@@ -57,6 +59,29 @@ pub async fn start_server() {
                         .unwrap();
 
                         debug!("Sending handshake packet: {:?}", payload.as_ref());
+
+                        socket
+                            .write_all(payload.as_ref())
+                            .await
+                            .expect("Failed to write data to socket");
+                    }
+                    Packet::LoginRequest(login_request) => {
+                        debug!("Received login request packet! {:?}", login_request);
+
+                        let payload = LoginRequestPayload {
+                            id: 1234,
+                            username: "".to_string(),
+                            level_type: "FLAT".to_string(),
+                            server_mode: 1,
+                            dimension: 0,
+                            difficulty: 0,
+                            unused_0: 0,
+                            max_players: 20,
+                        }
+                        .to_bytes()
+                        .unwrap();
+
+                        debug!("Sending login request packet: {:?}", payload.as_ref());
 
                         socket
                             .write_all(payload.as_ref())
