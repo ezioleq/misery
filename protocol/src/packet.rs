@@ -335,6 +335,34 @@ mod tests {
     use super::*;
 
     #[test]
+    fn put_string_empty() {
+        let mut buffer = BytesMut::with_capacity(2);
+        put_string(&mut buffer, "").unwrap();
+
+        assert_eq!(buffer.as_ref(), &[0x00, 0x00]);
+    }
+
+    #[test]
+    fn put_string_test() {
+        let mut buffer = BytesMut::with_capacity(10);
+        put_string(&mut buffer, "test").unwrap();
+
+        assert_eq!(
+            buffer.as_ref(),
+            &[0x00, 0x04, 0x00, 0x74, 0x00, 0x65, 0x00, 0x73, 0x00, 0x74]
+        );
+    }
+
+    #[test]
+    fn read_string_test() {
+        let mut cursor =
+            Cursor::new(&[0x00u8, 0x04, 0x00, 0x74, 0x00, 0x65, 0x00, 0x73, 0x00, 0x74] as &[u8]);
+        let s = read_string(&mut cursor).unwrap();
+
+        assert_eq!(s, "test");
+    }
+
+    #[test]
     fn decode_trailing_zeroes_without_payload() {
         let data: &[u8] = &[SERVER_LIST_PING_PACKET_ID, 0x00, 0x00, 0x00];
 
