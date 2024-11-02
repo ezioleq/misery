@@ -1,5 +1,5 @@
 use log::{debug, error, info};
-use protocol::packet::{DisconnectKickPayload, Packet, ToBytes};
+use protocol::packet::{DisconnectKickPayload, HandshakePayload, Packet, ToBytes};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpListener,
@@ -41,6 +41,22 @@ pub async fn start_server() {
                         .unwrap();
 
                         debug!("Sending status packet: {:?}", payload.as_ref() as &[u8]);
+
+                        socket
+                            .write_all(payload.as_ref())
+                            .await
+                            .expect("Failed to write data to socket");
+                    }
+                    Packet::Handshake(handshake) => {
+                        debug!("Received handshake packet! {:?}", handshake);
+
+                        let payload = HandshakePayload {
+                            data: "2e69f1dc002ab5f7".to_string(),
+                        }
+                        .to_bytes()
+                        .unwrap();
+
+                        debug!("Sending handshake packet: {:?}", payload.as_ref());
 
                         socket
                             .write_all(payload.as_ref())
