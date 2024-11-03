@@ -8,6 +8,8 @@ const KEEP_ALIVE_PACKET_ID: u8 = 0x00;
 const LOGIN_REQUEST_PACKET_ID: u8 = 0x01;
 /// Handshake packet identifier.
 const HANDSHAKE_PACKET_ID: u8 = 0x02;
+/// Chat message packet identifier;
+const CHAT_MESSAGE_PACKET_ID: u8 = 0x03;
 /// Player position and look packet identifier.
 const PLAYER_POSITION_AND_LOOK_PACKET_ID: u8 = 0x0D;
 /// Server list ping packet identifier.
@@ -26,6 +28,9 @@ pub enum Packet {
 
     /// Two-way, Handshake packet.
     Handshake(HandshakePayload),
+
+    /// Two-way, Chat message packet.
+    ChatMessage(ChatMessagePayload),
 
     /// Two-way, Player position and look packet.
     PlayerPositionAndLook(PlayerPositionAndLookPayload),
@@ -53,6 +58,9 @@ impl TryFrom<&[u8]> for Packet {
                 &mut cursor,
             )?)),
             HANDSHAKE_PACKET_ID => Ok(Packet::Handshake(HandshakePayload::from_bytes(
+                &mut cursor,
+            )?)),
+            CHAT_MESSAGE_PACKET_ID => Ok(Packet::ChatMessage(ChatMessagePayload::from_bytes(
                 &mut cursor,
             )?)),
             PLAYER_POSITION_AND_LOOK_PACKET_ID => Ok(Packet::PlayerPositionAndLook(
@@ -292,6 +300,36 @@ impl ToBytes for HandshakePayload {
         let mut buffer = BytesMut::with_capacity(3 + self.data.chars().count() * 2);
         buffer.put_u8(HANDSHAKE_PACKET_ID);
         put_string(&mut buffer, &self.data)?;
+        Ok(buffer)
+    }
+}
+
+//
+// Chat message
+//
+
+/// Payload for the `Packet::ChatMessage`.
+#[derive(Debug, PartialEq)]
+pub struct ChatMessagePayload {
+    /// Content of the message.
+    ///
+    /// User input must be sanitized server-side.
+    pub message: String,
+}
+
+impl FromBytes for ChatMessagePayload {
+    fn from_bytes(bytes: &mut Cursor<&[u8]>) -> io::Result<Self> {
+        Ok(Self {
+            message: read_string(bytes)?,
+        })
+    }
+}
+
+impl ToBytes for ChatMessagePayload {
+    fn to_bytes(&self) -> io::Result<BytesMut> {
+        let mut buffer = BytesMut::with_capacity(3 + self.message.chars().count() * 2);
+        buffer.put_u8(CHAT_MESSAGE_PACKET_ID);
+        put_string(&mut buffer, &self.message)?;
         Ok(buffer)
     }
 }
@@ -552,6 +590,31 @@ mod tests {
             data.as_ref(),
             &[0x02, 0x00, 0x03, 0x00, 0x65, 0x00, 0x3B, 0x00, 0x31]
         );
+    }
+
+    #[test]
+    fn decode_chat_message_packet() {
+        let data: &[u8] = &[0x03, 0x00, 0x02, 0x00, b'h', 0x00, b'i'];
+
+        let packet = Packet::try_from(data).unwrap();
+
+        assert_eq!(
+            packet,
+            Packet::ChatMessage(ChatMessagePayload {
+                message: "hi".to_string()
+            })
+        );
+    }
+
+    #[test]
+    fn encode_chat_message_packet() {
+        let packet = ChatMessagePayload {
+            message: "hi".to_string(),
+        };
+
+        let data = packet.to_bytes().unwrap();
+
+        assert_eq!(data.as_ref(), &[0x03, 0x00, 0x02, 0x00, b'h', 0x00, b'i']);
     }
 
     #[test]
