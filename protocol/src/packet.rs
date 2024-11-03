@@ -8,8 +8,14 @@ const KEEP_ALIVE_PACKET_ID: u8 = 0x00;
 const LOGIN_REQUEST_PACKET_ID: u8 = 0x01;
 /// Handshake packet identifier.
 const HANDSHAKE_PACKET_ID: u8 = 0x02;
-/// Chat message packet identifier;
+/// Chat message packet identifier.
 const CHAT_MESSAGE_PACKET_ID: u8 = 0x03;
+/// Time update packet identifier.
+const TIME_UPDATE_PACKET_ID: u8 = 0x04;
+/// Entity equipment packet identifier.
+const ENTITY_EQUIPMENT_PACKET_ID: u8 = 0x05;
+/// Spawn position packet identifier.
+const SPAWN_POSITION_PACKET_ID: u8 = 0x06;
 /// Player position and look packet identifier.
 const PLAYER_POSITION_AND_LOOK_PACKET_ID: u8 = 0x0D;
 /// Server list ping packet identifier.
@@ -31,6 +37,15 @@ pub enum Packet {
 
     /// Two-way, Chat message packet.
     ChatMessage(ChatMessagePayload),
+
+    /// Server to Client, time update packet.
+    TimeUpdate(TimeUpdatePayload),
+
+    /// Server to Client, entity equipment packet.
+    EntityEquipment(EntityEquipmentPayload),
+
+    /// Server to Client, spawn position packet.
+    SpawnPosition(SpawnPositionPayload),
 
     /// Two-way, Player position and look packet.
     PlayerPositionAndLook(PlayerPositionAndLookPayload),
@@ -63,6 +78,15 @@ impl TryFrom<&[u8]> for Packet {
             CHAT_MESSAGE_PACKET_ID => Ok(Packet::ChatMessage(ChatMessagePayload::from_bytes(
                 &mut cursor,
             )?)),
+            TIME_UPDATE_PACKET_ID => Ok(Packet::TimeUpdate(TimeUpdatePayload::from_bytes(
+                &mut cursor,
+            )?)),
+            ENTITY_EQUIPMENT_PACKET_ID => Ok(Packet::EntityEquipment(
+                EntityEquipmentPayload::from_bytes(&mut cursor)?,
+            )),
+            SPAWN_POSITION_PACKET_ID => Ok(Packet::SpawnPosition(
+                SpawnPositionPayload::from_bytes(&mut cursor)?,
+            )),
             PLAYER_POSITION_AND_LOOK_PACKET_ID => Ok(Packet::PlayerPositionAndLook(
                 PlayerPositionAndLookPayload::from_bytes(&mut cursor)?,
             )),
@@ -330,6 +354,113 @@ impl ToBytes for ChatMessagePayload {
         let mut buffer = BytesMut::with_capacity(3 + self.message.chars().count() * 2);
         buffer.put_u8(CHAT_MESSAGE_PACKET_ID);
         put_string(&mut buffer, &self.message)?;
+        Ok(buffer)
+    }
+}
+
+//
+// Time update
+//
+
+/// Payload for the `Packet::TimeUpdate`.
+#[derive(Debug, PartialEq)]
+pub struct TimeUpdatePayload {
+    /// The world (or region) time in ticks.
+    pub time: i64,
+}
+
+impl FromBytes for TimeUpdatePayload {
+    fn from_bytes(bytes: &mut Cursor<&[u8]>) -> io::Result<Self> {
+        Ok(Self {
+            time: bytes.get_i64(),
+        })
+    }
+}
+
+impl ToBytes for TimeUpdatePayload {
+    fn to_bytes(&self) -> io::Result<BytesMut> {
+        let mut buffer = BytesMut::with_capacity(9);
+        buffer.put_u8(TIME_UPDATE_PACKET_ID);
+        buffer.put_i64(self.time);
+        Ok(buffer)
+    }
+}
+
+//
+// Entity equipment
+//
+
+/// Payload for the `Packet::EntityEquipment`.
+#[derive(Debug, PartialEq)]
+pub struct EntityEquipmentPayload {
+    /// Named entity identifier.
+    entity_id: i32,
+
+    /// Equipment slot, 0 is held, 1-4 are armor slots.
+    slot: i16,
+
+    /// Equipped item, -1 for empty slot.
+    item_id: i16,
+
+    /// Undocumented.
+    damage: i16,
+}
+
+impl FromBytes for EntityEquipmentPayload {
+    fn from_bytes(bytes: &mut Cursor<&[u8]>) -> io::Result<Self> {
+        Ok(Self {
+            entity_id: bytes.get_i32(),
+            slot: bytes.get_i16(),
+            item_id: bytes.get_i16(),
+            damage: bytes.get_i16(),
+        })
+    }
+}
+
+impl ToBytes for EntityEquipmentPayload {
+    fn to_bytes(&self) -> io::Result<BytesMut> {
+        let mut buffer = BytesMut::with_capacity(11);
+        buffer.put_u8(ENTITY_EQUIPMENT_PACKET_ID);
+        buffer.put_i32(self.entity_id);
+        buffer.put_i16(self.slot);
+        buffer.put_i16(self.item_id);
+        buffer.put_i16(self.damage);
+        Ok(buffer)
+    }
+}
+
+//
+// Spawn position packet
+//
+
+/// Payload for the `Packet::SpawnPosition`.
+#[derive(Debug, PartialEq)]
+pub struct SpawnPositionPayload {
+    /// Spawn X in block coordinates.
+    pub x: i32,
+    /// Spawn Y in block coordinates.
+    pub y: i32,
+    /// Spawn Z in block coordinates.
+    pub z: i32,
+}
+
+impl FromBytes for SpawnPositionPayload {
+    fn from_bytes(bytes: &mut Cursor<&[u8]>) -> io::Result<Self> {
+        Ok(Self {
+            x: bytes.get_i32(),
+            y: bytes.get_i32(),
+            z: bytes.get_i32(),
+        })
+    }
+}
+
+impl ToBytes for SpawnPositionPayload {
+    fn to_bytes(&self) -> io::Result<BytesMut> {
+        let mut buffer = BytesMut::with_capacity(13);
+        buffer.put_u8(SPAWN_POSITION_PACKET_ID);
+        buffer.put_i32(self.x);
+        buffer.put_i32(self.y);
+        buffer.put_i32(self.z);
         Ok(buffer)
     }
 }
@@ -615,6 +746,97 @@ mod tests {
         let data = packet.to_bytes().unwrap();
 
         assert_eq!(data.as_ref(), &[0x03, 0x00, 0x02, 0x00, b'h', 0x00, b'i']);
+    }
+
+    #[test]
+    fn decode_time_update_packet() {
+        let data: &[u8] = &[0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10];
+
+        let packet = Packet::try_from(data).unwrap();
+
+        assert_eq!(packet, Packet::TimeUpdate(TimeUpdatePayload { time: 16 }));
+    }
+
+    #[test]
+    fn encode_time_update_packet() {
+        let packet = TimeUpdatePayload { time: 16 };
+
+        let data = packet.to_bytes().unwrap();
+
+        assert_eq!(
+            data.as_ref(),
+            &[0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10]
+        );
+    }
+
+    #[test]
+    fn decode_entity_equipment_packet() {
+        let data: &[u8] = &[
+            0x05, 0x00, 0x00, 0x00, 0x20, 0x00, 0x04, 0x00, 0x40, 0x00, 0x00,
+        ];
+
+        let packet = Packet::try_from(data).unwrap();
+
+        assert_eq!(
+            packet,
+            Packet::EntityEquipment(EntityEquipmentPayload {
+                entity_id: 32,
+                slot: 4,
+                item_id: 64,
+                damage: 0
+            })
+        );
+    }
+
+    #[test]
+    fn encode_entity_equipment_packet() {
+        let packet = EntityEquipmentPayload {
+            entity_id: 32,
+            slot: 4,
+            item_id: 64,
+            damage: 0,
+        };
+
+        let data = packet.to_bytes().unwrap();
+
+        assert_eq!(
+            data.as_ref(),
+            &[0x05, 0x00, 0x00, 0x00, 0x20, 0x00, 0x04, 0x00, 0x40, 0x00, 0x00]
+        )
+    }
+
+    #[test]
+    fn decode_spawn_position_packet() {
+        let data: &[u8] = &[
+            0x06, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x20, 0x00, 0x00, 0x00, 0x30,
+        ];
+
+        let packet = Packet::try_from(data).unwrap();
+
+        assert_eq!(
+            packet,
+            Packet::SpawnPosition(SpawnPositionPayload {
+                x: 16,
+                y: 32,
+                z: 48,
+            })
+        );
+    }
+
+    #[test]
+    fn encode_spawn_position_packet() {
+        let packet = SpawnPositionPayload {
+            x: 16,
+            y: 32,
+            z: 48,
+        };
+
+        let data = packet.to_bytes().unwrap();
+
+        assert_eq!(
+            data.as_ref(),
+            &[0x06, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x20, 0x00, 0x00, 0x00, 0x30]
+        )
     }
 
     #[test]
