@@ -57,87 +57,124 @@ pub enum Packet {
     DisconnectKick(DisconnectKickPayload),
 }
 
-impl TryFrom<&[u8]> for Packet {
-    type Error = io::Error;
-
-    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
-        let mut cursor = Cursor::new(value);
-
+impl Packet {
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, io::Error> {
+        let mut cursor = Cursor::new(bytes);
         let packet_id = cursor.get_u8();
 
         match packet_id {
-            KEEP_ALIVE_PACKET_ID => Ok(Packet::KeepAlive(KeepAlivePayload::from_bytes(
-                &mut cursor,
-            )?)),
-            LOGIN_REQUEST_PACKET_ID => Ok(Packet::LoginRequest(LoginRequestPayload::from_bytes(
-                &mut cursor,
-            )?)),
-            HANDSHAKE_PACKET_ID => Ok(Packet::Handshake(HandshakePayload::from_bytes(
-                &mut cursor,
-            )?)),
-            CHAT_MESSAGE_PACKET_ID => Ok(Packet::ChatMessage(ChatMessagePayload::from_bytes(
-                &mut cursor,
-            )?)),
-            TIME_UPDATE_PACKET_ID => Ok(Packet::TimeUpdate(TimeUpdatePayload::from_bytes(
-                &mut cursor,
-            )?)),
-            ENTITY_EQUIPMENT_PACKET_ID => Ok(Packet::EntityEquipment(
-                EntityEquipmentPayload::from_bytes(&mut cursor)?,
-            )),
-            SPAWN_POSITION_PACKET_ID => Ok(Packet::SpawnPosition(
-                SpawnPositionPayload::from_bytes(&mut cursor)?,
-            )),
-            PLAYER_POSITION_AND_LOOK_PACKET_ID => Ok(Packet::PlayerPositionAndLook(
-                PlayerPositionAndLookPayload::from_bytes(&mut cursor)?,
-            )),
-            SERVER_LIST_PING_PACKET_ID => Ok(Packet::ServerListPing(
-                ServerListPingPayload::from_bytes(&mut cursor)?,
-            )),
-            DISCONNECT_KICK_PACKET_ID => Ok(Packet::DisconnectKick(
-                DisconnectKickPayload::from_bytes(&mut cursor)?,
-            )),
+            KEEP_ALIVE_PACKET_ID => {
+                let payload = KeepAlivePayload::from_bytes(&mut cursor)?;
+                Ok(Packet::KeepAlive(payload))
+            }
+            LOGIN_REQUEST_PACKET_ID => {
+                let payload = LoginRequestPayload::from_bytes(&mut cursor)?;
+                Ok(Packet::LoginRequest(payload))
+            }
+            DISCONNECT_KICK_PACKET_ID => {
+                let payload = DisconnectKickPayload::from_bytes(&mut cursor)?;
+                Ok(Packet::DisconnectKick(payload))
+            }
+            HANDSHAKE_PACKET_ID => {
+                let payload = HandshakePayload::from_bytes(&mut cursor)?;
+                Ok(Packet::Handshake(payload))
+            }
+            CHAT_MESSAGE_PACKET_ID => {
+                let payload = ChatMessagePayload::from_bytes(&mut cursor)?;
+                Ok(Packet::ChatMessage(payload))
+            }
+            TIME_UPDATE_PACKET_ID => {
+                let payload = TimeUpdatePayload::from_bytes(&mut cursor)?;
+                Ok(Packet::TimeUpdate(payload))
+            }
+            ENTITY_EQUIPMENT_PACKET_ID => {
+                let payload = EntityEquipmentPayload::from_bytes(&mut cursor)?;
+                Ok(Packet::EntityEquipment(payload))
+            }
+            SPAWN_POSITION_PACKET_ID => {
+                let payload = SpawnPositionPayload::from_bytes(&mut cursor)?;
+                Ok(Packet::SpawnPosition(payload))
+            }
+            PLAYER_POSITION_AND_LOOK_PACKET_ID => {
+                let payload = PlayerPositionAndLookPayload::from_bytes(&mut cursor)?;
+                Ok(Packet::PlayerPositionAndLook(payload))
+            }
+            SERVER_LIST_PING_PACKET_ID => {
+                let payload = ServerListPingPayload::from_bytes(&mut cursor)?;
+                Ok(Packet::ServerListPing(payload))
+            }
             _ => Err(io::Error::new(
                 io::ErrorKind::InvalidData,
-                "Unknown packet identifier",
+                "Unknown packet ID",
             )),
         }
     }
+
+    pub fn to_bytes(&self) -> Result<Vec<u8>, io::Error> {
+        let mut buffer = BytesMut::new();
+
+        match self {
+            Packet::KeepAlive(payload) => {
+                buffer.put_u8(KEEP_ALIVE_PACKET_ID);
+                payload.to_bytes(&mut buffer)?;
+            }
+            Packet::LoginRequest(payload) => {
+                buffer.put_u8(LOGIN_REQUEST_PACKET_ID);
+                payload.to_bytes(&mut buffer)?;
+            }
+            Packet::Handshake(payload) => {
+                buffer.put_u8(HANDSHAKE_PACKET_ID);
+                payload.to_bytes(&mut buffer)?;
+            }
+            Packet::ChatMessage(payload) => {
+                buffer.put_u8(CHAT_MESSAGE_PACKET_ID);
+                payload.to_bytes(&mut buffer)?;
+            }
+            Packet::TimeUpdate(payload) => {
+                buffer.put_u8(TIME_UPDATE_PACKET_ID);
+                payload.to_bytes(&mut buffer)?;
+            }
+            Packet::EntityEquipment(payload) => {
+                buffer.put_u8(ENTITY_EQUIPMENT_PACKET_ID);
+                payload.to_bytes(&mut buffer)?;
+            }
+            Packet::SpawnPosition(payload) => {
+                buffer.put_u8(SPAWN_POSITION_PACKET_ID);
+                payload.to_bytes(&mut buffer)?;
+            }
+            Packet::PlayerPositionAndLook(payload) => {
+                buffer.put_u8(PLAYER_POSITION_AND_LOOK_PACKET_ID);
+                payload.to_bytes(&mut buffer)?;
+            }
+            Packet::ServerListPing(_) => {
+                buffer.put_u8(SERVER_LIST_PING_PACKET_ID);
+            }
+            Packet::DisconnectKick(payload) => {
+                buffer.put_u8(DISCONNECT_KICK_PACKET_ID);
+                payload.to_bytes(&mut buffer)?;
+            }
+        }
+
+        Ok(buffer.to_vec())
+    }
 }
 
-/// Parse a packet from a byte stream.
-pub trait FromBytes: Sized {
-    /// Parses bytes to return a value of this packet.
+/// Parse a packet payload from a byte stream.
+trait FromBytes: Sized {
+    /// Parses bytes to return a value of this payload.
     ///
     /// If parsing succeeds, return the value inside Ok,
     /// otherwise when the data bytes are invalid return an `io::Error`.
-    ///
-    /// ## Example
-    /// ```
-    /// use std::io::Cursor;
-    /// use protocol::packet::{KeepAlivePayload, FromBytes};
-    ///
-    /// let mut cursor = Cursor::new(&[0x0u8, 0x0, 0x0, 0x0, 0x0] as &[u8]);
-    /// let payload = KeepAlivePayload::from_bytes(&mut cursor);
-    /// ```
     fn from_bytes(bytes: &mut Cursor<&[u8]>) -> io::Result<Self>;
 }
 
-/// Converts a packet to a byte buffer.
-pub trait ToBytes {
-    /// Converts a value to return a bytes representation of this packet.
-    /// Encoded packet contains its appropriate identifier as a first byte.
+/// Converts a packet payload to a byte buffer.
+trait ToBytes {
+    /// Converts a value to return a bytes representation of this payload.
     ///
     /// If converting succeeds, return the value inside Ok,
     /// otherwise when there is no more space left in the buffer return an `io::Error`.
-    ///
-    /// ## Example
-    /// ```
-    /// use protocol::packet::{KeepAlivePayload, ToBytes};
-    ///
-    /// let payload = KeepAlivePayload { keep_alive_id: 3 };
-    /// let bytes = payload.to_bytes().unwrap();
-    /// ```
-    fn to_bytes(&self) -> io::Result<BytesMut>;
+    fn to_bytes(&self, buffer: &mut BytesMut) -> io::Result<()>;
 }
 
 /// Reads a UTF-16 encoded string from a byte stream.
@@ -195,11 +232,9 @@ impl FromBytes for KeepAlivePayload {
 }
 
 impl ToBytes for KeepAlivePayload {
-    fn to_bytes(&self) -> io::Result<BytesMut> {
-        let mut buffer = BytesMut::with_capacity(5);
-        buffer.put_u8(KEEP_ALIVE_PACKET_ID);
+    fn to_bytes(&self, buffer: &mut BytesMut) -> io::Result<()> {
         buffer.put_i32(self.keep_alive_id);
-        Ok(buffer)
+        Ok(())
     }
 }
 
@@ -279,20 +314,16 @@ impl FromBytes for LoginRequestPayload {
 }
 
 impl ToBytes for LoginRequestPayload {
-    fn to_bytes(&self) -> io::Result<BytesMut> {
-        let mut buffer = BytesMut::with_capacity(
-            20 + self.username.chars().count() * 2 + self.level_type.chars().count() * 2,
-        );
-        buffer.put_u8(LOGIN_REQUEST_PACKET_ID);
+    fn to_bytes(&self, buffer: &mut BytesMut) -> io::Result<()> {
         buffer.put_i32(self.id);
-        put_string(&mut buffer, &self.username)?;
-        put_string(&mut buffer, &self.level_type)?;
+        put_string(buffer, &self.username)?;
+        put_string(buffer, &self.level_type)?;
         buffer.put_i32(self.server_mode);
         buffer.put_i32(self.dimension);
         buffer.put_i8(self.difficulty);
         buffer.put_u8(self.unused_0);
         buffer.put_u8(self.max_players);
-        Ok(buffer)
+        Ok(())
     }
 }
 
@@ -320,11 +351,9 @@ impl FromBytes for HandshakePayload {
 }
 
 impl ToBytes for HandshakePayload {
-    fn to_bytes(&self) -> io::Result<BytesMut> {
-        let mut buffer = BytesMut::with_capacity(3 + self.data.chars().count() * 2);
-        buffer.put_u8(HANDSHAKE_PACKET_ID);
-        put_string(&mut buffer, &self.data)?;
-        Ok(buffer)
+    fn to_bytes(&self, buffer: &mut BytesMut) -> io::Result<()> {
+        put_string(buffer, &self.data)?;
+        Ok(())
     }
 }
 
@@ -350,11 +379,9 @@ impl FromBytes for ChatMessagePayload {
 }
 
 impl ToBytes for ChatMessagePayload {
-    fn to_bytes(&self) -> io::Result<BytesMut> {
-        let mut buffer = BytesMut::with_capacity(3 + self.message.chars().count() * 2);
-        buffer.put_u8(CHAT_MESSAGE_PACKET_ID);
-        put_string(&mut buffer, &self.message)?;
-        Ok(buffer)
+    fn to_bytes(&self, buffer: &mut BytesMut) -> io::Result<()> {
+        put_string(buffer, &self.message)?;
+        Ok(())
     }
 }
 
@@ -378,11 +405,9 @@ impl FromBytes for TimeUpdatePayload {
 }
 
 impl ToBytes for TimeUpdatePayload {
-    fn to_bytes(&self) -> io::Result<BytesMut> {
-        let mut buffer = BytesMut::with_capacity(9);
-        buffer.put_u8(TIME_UPDATE_PACKET_ID);
+    fn to_bytes(&self, buffer: &mut BytesMut) -> io::Result<()> {
         buffer.put_i64(self.time);
-        Ok(buffer)
+        Ok(())
     }
 }
 
@@ -418,14 +443,12 @@ impl FromBytes for EntityEquipmentPayload {
 }
 
 impl ToBytes for EntityEquipmentPayload {
-    fn to_bytes(&self) -> io::Result<BytesMut> {
-        let mut buffer = BytesMut::with_capacity(11);
-        buffer.put_u8(ENTITY_EQUIPMENT_PACKET_ID);
+    fn to_bytes(&self, buffer: &mut BytesMut) -> io::Result<()> {
         buffer.put_i32(self.entity_id);
         buffer.put_i16(self.slot);
         buffer.put_i16(self.item_id);
         buffer.put_i16(self.damage);
-        Ok(buffer)
+        Ok(())
     }
 }
 
@@ -455,13 +478,11 @@ impl FromBytes for SpawnPositionPayload {
 }
 
 impl ToBytes for SpawnPositionPayload {
-    fn to_bytes(&self) -> io::Result<BytesMut> {
-        let mut buffer = BytesMut::with_capacity(13);
-        buffer.put_u8(SPAWN_POSITION_PACKET_ID);
+    fn to_bytes(&self, buffer: &mut BytesMut) -> io::Result<()> {
         buffer.put_i32(self.x);
         buffer.put_i32(self.y);
         buffer.put_i32(self.z);
-        Ok(buffer)
+        Ok(())
     }
 }
 
@@ -517,9 +538,7 @@ impl FromBytes for PlayerPositionAndLookPayload {
 }
 
 impl ToBytes for PlayerPositionAndLookPayload {
-    fn to_bytes(&self) -> io::Result<BytesMut> {
-        let mut buffer = BytesMut::with_capacity(42);
-        buffer.put_u8(PLAYER_POSITION_AND_LOOK_PACKET_ID);
+    fn to_bytes(&self, buffer: &mut BytesMut) -> io::Result<()> {
         buffer.put_f64(self.x);
         buffer.put_f64(self.stance_y_0);
         buffer.put_f64(self.stance_y_1);
@@ -527,7 +546,7 @@ impl ToBytes for PlayerPositionAndLookPayload {
         buffer.put_f32(self.yaw);
         buffer.put_f32(self.pitch);
         buffer.put_u8(self.on_ground);
-        Ok(buffer)
+        Ok(())
     }
 }
 
@@ -564,11 +583,9 @@ impl FromBytes for DisconnectKickPayload {
 }
 
 impl ToBytes for DisconnectKickPayload {
-    fn to_bytes(&self) -> io::Result<BytesMut> {
-        let mut buffer = BytesMut::with_capacity(1 + 2 + self.reason.chars().count() * 2);
-        buffer.put_u8(DISCONNECT_KICK_PACKET_ID);
-        put_string(&mut buffer, &self.reason)?;
-        Ok(buffer)
+    fn to_bytes(&self, buffer: &mut BytesMut) -> io::Result<()> {
+        put_string(buffer, &self.reason)?;
+        Ok(())
     }
 }
 
@@ -609,7 +626,7 @@ mod tests {
     fn decode_trailing_zeroes_without_payload() {
         let data: &[u8] = &[0xFE, 0x00, 0x00, 0x00];
 
-        let packet = Packet::try_from(data).unwrap();
+        let packet = Packet::from_bytes(data).unwrap();
 
         assert_eq!(packet, Packet::ServerListPing(ServerListPingPayload {}));
     }
@@ -618,7 +635,7 @@ mod tests {
     fn decode_trailing_zeroes_with_payload() {
         let data: &[u8] = &[0x00, 0x00, 0x00, 0x00, 0x11, 0x00, 0x00, 0x00, 0x00];
 
-        let packet = Packet::try_from(data).unwrap();
+        let packet = Packet::from_bytes(data).unwrap();
 
         assert_eq!(
             packet,
@@ -630,7 +647,7 @@ mod tests {
     fn decode_keep_alive_packet() {
         let data: &[u8] = &[0x00, 0x00, 0x00, 0x00, 0x11];
 
-        let packet = Packet::try_from(data).unwrap();
+        let packet = Packet::from_bytes(data).unwrap();
 
         assert_eq!(
             packet,
@@ -640,11 +657,11 @@ mod tests {
 
     #[test]
     fn encode_keep_alive_packet() {
-        let packet = KeepAlivePayload { keep_alive_id: 17 };
+        let packet = Packet::KeepAlive(KeepAlivePayload { keep_alive_id: 17 });
 
         let data = packet.to_bytes().unwrap();
 
-        assert_eq!(data.as_ref(), &[0x00, 0x00, 0x00, 0x00, 0x11]);
+        assert_eq!(data, &[0x00, 0x00, 0x00, 0x00, 0x11]);
     }
 
     #[test]
@@ -654,7 +671,7 @@ mod tests {
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         ];
 
-        let packet = Packet::try_from(data).unwrap();
+        let packet = Packet::from_bytes(data).unwrap();
 
         assert_eq!(
             packet,
@@ -673,7 +690,7 @@ mod tests {
 
     #[test]
     fn encode_login_request_packet() {
-        let packet = LoginRequestPayload {
+        let packet = Packet::LoginRequest(LoginRequestPayload {
             id: 1234,
             username: "".to_string(),
             level_type: "FLAT".to_string(),
@@ -682,12 +699,12 @@ mod tests {
             difficulty: 0,
             unused_0: 0,
             max_players: 5,
-        };
+        });
 
         let data = packet.to_bytes().unwrap();
 
         assert_eq!(
-            data.as_ref(),
+            data,
             &[
                 0x01, 0x00, 0x00, 0x04, 0xD2, 0x00, 0x00, 0x00, 0x04, 0x00, 0x46, 0x00, 0x4C, 0x00,
                 0x41, 0x00, 0x54, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x05,
@@ -699,7 +716,7 @@ mod tests {
     fn decode_handshake_packet() {
         let data: &[u8] = &[0x02, 0x00, 0x03, 0x00, 0x65, 0x00, 0x3B, 0x00, 0x31];
 
-        let packet = Packet::try_from(data).unwrap();
+        let packet = Packet::from_bytes(data).unwrap();
 
         assert_eq!(
             packet,
@@ -711,14 +728,14 @@ mod tests {
 
     #[test]
     fn encode_handshake_packet() {
-        let packet = HandshakePayload {
+        let packet = Packet::Handshake(HandshakePayload {
             data: "e;1".to_string(),
-        };
+        });
 
         let data = packet.to_bytes().unwrap();
 
         assert_eq!(
-            data.as_ref(),
+            data,
             &[0x02, 0x00, 0x03, 0x00, 0x65, 0x00, 0x3B, 0x00, 0x31]
         );
     }
@@ -727,7 +744,7 @@ mod tests {
     fn decode_chat_message_packet() {
         let data: &[u8] = &[0x03, 0x00, 0x02, 0x00, b'h', 0x00, b'i'];
 
-        let packet = Packet::try_from(data).unwrap();
+        let packet = Packet::from_bytes(data).unwrap();
 
         assert_eq!(
             packet,
@@ -739,32 +756,32 @@ mod tests {
 
     #[test]
     fn encode_chat_message_packet() {
-        let packet = ChatMessagePayload {
+        let packet = Packet::ChatMessage(ChatMessagePayload {
             message: "hi".to_string(),
-        };
+        });
 
         let data = packet.to_bytes().unwrap();
 
-        assert_eq!(data.as_ref(), &[0x03, 0x00, 0x02, 0x00, b'h', 0x00, b'i']);
+        assert_eq!(data, &[0x03, 0x00, 0x02, 0x00, b'h', 0x00, b'i']);
     }
 
     #[test]
     fn decode_time_update_packet() {
         let data: &[u8] = &[0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10];
 
-        let packet = Packet::try_from(data).unwrap();
+        let packet = Packet::from_bytes(data).unwrap();
 
         assert_eq!(packet, Packet::TimeUpdate(TimeUpdatePayload { time: 16 }));
     }
 
     #[test]
     fn encode_time_update_packet() {
-        let packet = TimeUpdatePayload { time: 16 };
+        let packet = Packet::TimeUpdate(TimeUpdatePayload { time: 16 });
 
         let data = packet.to_bytes().unwrap();
 
         assert_eq!(
-            data.as_ref(),
+            data,
             &[0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10]
         );
     }
@@ -775,7 +792,7 @@ mod tests {
             0x05, 0x00, 0x00, 0x00, 0x20, 0x00, 0x04, 0x00, 0x40, 0x00, 0x00,
         ];
 
-        let packet = Packet::try_from(data).unwrap();
+        let packet = Packet::from_bytes(data).unwrap();
 
         assert_eq!(
             packet,
@@ -790,17 +807,17 @@ mod tests {
 
     #[test]
     fn encode_entity_equipment_packet() {
-        let packet = EntityEquipmentPayload {
+        let packet = Packet::EntityEquipment(EntityEquipmentPayload {
             entity_id: 32,
             slot: 4,
             item_id: 64,
             damage: 0,
-        };
+        });
 
         let data = packet.to_bytes().unwrap();
 
         assert_eq!(
-            data.as_ref(),
+            data,
             &[0x05, 0x00, 0x00, 0x00, 0x20, 0x00, 0x04, 0x00, 0x40, 0x00, 0x00]
         )
     }
@@ -811,7 +828,7 @@ mod tests {
             0x06, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x20, 0x00, 0x00, 0x00, 0x30,
         ];
 
-        let packet = Packet::try_from(data).unwrap();
+        let packet = Packet::from_bytes(data).unwrap();
 
         assert_eq!(
             packet,
@@ -825,16 +842,16 @@ mod tests {
 
     #[test]
     fn encode_spawn_position_packet() {
-        let packet = SpawnPositionPayload {
+        let packet = Packet::SpawnPosition(SpawnPositionPayload {
             x: 16,
             y: 32,
             z: 48,
-        };
+        });
 
         let data = packet.to_bytes().unwrap();
 
         assert_eq!(
-            data.as_ref(),
+            data,
             &[0x06, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x20, 0x00, 0x00, 0x00, 0x30]
         )
     }
@@ -846,7 +863,7 @@ mod tests {
             0, 0, 64, 33, 0, 0, 0, 0, 0, 0, 195, 52, 0, 0, 0, 0, 0, 0, 0,
         ];
 
-        let packet = Packet::try_from(data).unwrap();
+        let packet = Packet::from_bytes(data).unwrap();
 
         assert_eq!(
             packet,
@@ -866,7 +883,7 @@ mod tests {
 
     #[test]
     fn encode_player_position_and_look_packet() {
-        let packet = PlayerPositionAndLookPayload {
+        let packet = Packet::PlayerPositionAndLook(PlayerPositionAndLookPayload {
             x: 8.5,
             stance_y_0: 65.0,
             stance_y_1: 66.62000000476837,
@@ -874,12 +891,12 @@ mod tests {
             yaw: -180.0,
             pitch: 0.0,
             on_ground: 0,
-        };
+        });
 
         let data = packet.to_bytes().unwrap();
 
         assert_eq!(
-            data.as_ref(),
+            data,
             &[
                 0x0D, 0x40, 0x21, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x50, 0x40, 0x00, 0x00,
                 0x00, 0x00, 0x00, 0x40, 0x50, 0xA7, 0xAE, 0x14, 0x80, 0x00, 0x00, 0x40, 0x21, 0x00,
@@ -892,7 +909,7 @@ mod tests {
     fn decode_server_list_ping_packet() {
         let data: &[u8] = &[0xFE];
 
-        let packet = Packet::try_from(data).unwrap();
+        let packet = Packet::from_bytes(data).unwrap();
 
         assert_eq!(packet, Packet::ServerListPing(ServerListPingPayload {}));
     }
@@ -901,7 +918,7 @@ mod tests {
     fn decode_disconnect_kick_packet() {
         let data: &[u8] = &[0xFF, 0x00, 0x01, 0x00, b'A'];
 
-        let packet = Packet::try_from(data).unwrap();
+        let packet = Packet::from_bytes(data).unwrap();
 
         assert_eq!(
             packet,
@@ -913,13 +930,13 @@ mod tests {
 
     #[test]
     fn encode_disconnect_kick_packet() {
-        let packet = DisconnectKickPayload {
+        let packet = Packet::DisconnectKick(DisconnectKickPayload {
             reason: "A".to_string(),
-        };
+        });
 
         let data = packet.to_bytes().unwrap();
 
-        assert_eq!(data.as_ref(), &[0xFF, 0x00, 0x01, 0x00, b'A'])
+        assert_eq!(data, &[0xFF, 0x00, 0x01, 0x00, b'A'])
     }
 
     #[test]
@@ -929,12 +946,12 @@ mod tests {
             0x34, 0x00, 0xA7, 0x00, 0x34,
         ];
 
-        let packet = DisconnectKickPayload {
+        let packet = Packet::DisconnectKick(DisconnectKickPayload {
             reason: "EZIO§4§4".to_string(),
-        };
+        });
 
         let data = packet.to_bytes().unwrap();
 
-        assert_eq!(data.as_ref(), expected_data)
+        assert_eq!(data, expected_data)
     }
 }

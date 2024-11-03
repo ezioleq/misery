@@ -1,12 +1,20 @@
 use log::{debug, error, info, trace};
 use protocol::packet::{
-    DisconnectKickPayload, HandshakePayload, KeepAlivePayload, LoginRequestPayload, Packet,
-    PlayerPositionAndLookPayload, SpawnPositionPayload, ToBytes,
+    DisconnectKickPayload, HandshakePayload, LoginRequestPayload, Packet,
+    PlayerPositionAndLookPayload, SpawnPositionPayload,
 };
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
-    net::TcpListener,
+    net::{TcpListener, TcpStream},
 };
+
+pub async fn send_packet(socket: &mut TcpStream, packet: Packet) -> std::io::Result<()> {
+    let data = packet.to_bytes()?;
+    socket.write_all(&data).await?;
+
+    trace!("Sent: {:?} {:02X?}", packet, &data);
+    Ok(())
+}
 
 pub async fn start_server() {
     info!("Hello! :3");
@@ -17,11 +25,11 @@ pub async fn start_server() {
         debug!("Connection from {:?}", &addr);
 
         tokio::spawn(async move {
-            let mut buf = vec![0u8; 128];
+            let mut buffer = vec![0u8; 256];
 
             loop {
                 let n = socket
-                    .read(&mut buf)
+                    .read(&mut buffer)
                     .await
                     .expect("Failed to read data from socket");
 
@@ -29,9 +37,9 @@ pub async fn start_server() {
                     return;
                 }
 
-                trace!("Received packet: {:?}", buf);
+                trace!("Received: {:02X?}", buffer);
 
-                let Ok(packet) = Packet::try_from(buf.as_ref()) else {
+                let Ok(packet) = Packet::from_bytes(buffer.as_ref()) else {
                     return;
                 };
 
@@ -39,126 +47,89 @@ pub async fn start_server() {
                     Packet::ServerListPing(_) => {
                         debug!("Received server ping packet!");
 
-                        let payload = DisconnectKickPayload {
-                            reason: "A Minecraft Server§0§20".to_string(),
-                        }
-                        .to_bytes()
+                        send_packet(
+                            &mut socket,
+                            Packet::DisconnectKick(DisconnectKickPayload {
+                                reason: "A Minecraft Server§0§20".to_string(),
+                            }),
+                        )
+                        .await
                         .unwrap();
-
-                        debug!("Sending status packet: {:?}", payload.as_ref());
-
-                        socket
-                            .write_all(payload.as_ref())
-                            .await
-                            .expect("Failed to write data to socket");
                     }
-                    Packet::Handshake(handshake) => {
-                        debug!("Received handshake packet! {:?}", handshake);
+                    Packet::Handshake(_) => {
+                        debug!("Received handshake packet!");
 
-                        let payload = HandshakePayload {
-                            data: "-".to_string(),
-                        }
-                        .to_bytes()
+                        send_packet(
+                            &mut socket,
+                            Packet::Handshake(HandshakePayload {
+                                data: "-".to_string(),
+                            }),
+                        )
+                        .await
                         .unwrap();
-
-                        trace!("Sending handshake packet: {:?}", payload.as_ref());
-
-                        socket
-                            .write_all(payload.as_ref())
-                            .await
-                            .expect("Failed to write data to socket");
                     }
-                    Packet::LoginRequest(login_request) => {
-                        debug!("Received login request packet! {:?}", login_request);
+                    Packet::LoginRequest(_) => {
+                        debug!("Received login request packet!");
 
-                        let payload = LoginRequestPayload {
-                            id: 1234,
-                            username: "".to_string(),
-                            level_type: "default".to_string(),
-                            server_mode: 1,
-                            dimension: 0,
-                            difficulty: 0,
-                            unused_0: 0,
-                            max_players: 20,
-                        }
-                        .to_bytes()
+                        send_packet(
+                            &mut socket,
+                            Packet::LoginRequest(LoginRequestPayload {
+                                id: 1234,
+                                username: "".to_string(),
+                                level_type: "default".to_string(),
+                                server_mode: 1,
+                                dimension: 0,
+                                difficulty: 0,
+                                unused_0: 0,
+                                max_players: 20,
+                            }),
+                        )
+                        .await
                         .unwrap();
-
-                        trace!("Sending login request packet: {:?}", payload.as_ref());
-
-                        socket
-                            .write_all(payload.as_ref())
-                            .await
-                            .expect("Failed to write data to socket");
 
                         // spawn position
 
-                        let payload = SpawnPositionPayload { x: 8, y: 65, z: 8 }
-                            .to_bytes()
-                            .unwrap();
-
-                        trace!("Sending spawn position packet: {:?}", payload.as_ref());
-
-                        socket
-                            .write_all(payload.as_ref())
-                            .await
-                            .expect("Failed to write data to socket");
+                        send_packet(
+                            &mut socket,
+                            Packet::SpawnPosition(SpawnPositionPayload { x: 8, y: 65, z: 8 }),
+                        )
+                        .await
+                        .unwrap();
 
                         // position and look
 
-                        let payload = PlayerPositionAndLookPayload {
-                            x: 8.5,
-                            stance_y_0: 66.62,
-                            stance_y_1: 65.0,
-                            z: 8.5,
-                            yaw: -180.0,
-                            pitch: 0.0,
-                            on_ground: 0,
-                        }
-                        .to_bytes()
+                        send_packet(
+                            &mut socket,
+                            Packet::PlayerPositionAndLook(PlayerPositionAndLookPayload {
+                                x: 8.5,
+                                stance_y_0: 66.62,
+                                stance_y_1: 65.0,
+                                z: 8.5,
+                                yaw: -180.0,
+                                pitch: 0.0,
+                                on_ground: 0,
+                            }),
+                        )
+                        .await
                         .unwrap();
-
-                        trace!(
-                            "Sending player position and look packet: {:?}",
-                            payload.as_ref()
-                        );
-
-                        socket
-                            .write_all(payload.as_ref())
-                            .await
-                            .expect("Failed to write data to socket");
                     }
                     Packet::PlayerPositionAndLook(position_and_look) => {
-                        debug!(
-                            "Received player position and look packet! {:?}",
-                            position_and_look
-                        );
+                        debug!("Received player position and look packet!",);
 
-                        let payload = PlayerPositionAndLookPayload {
-                            x: position_and_look.x,
-                            stance_y_0: position_and_look.stance_y_0,
-                            stance_y_1: position_and_look.stance_y_1,
-                            z: position_and_look.z,
-                            yaw: position_and_look.yaw,
-                            pitch: position_and_look.pitch,
-                            on_ground: position_and_look.on_ground,
-                        }
-                        .to_bytes()
+                        send_packet(
+                            &mut socket,
+                            Packet::PlayerPositionAndLook(PlayerPositionAndLookPayload {
+                                x: position_and_look.x,
+                                stance_y_0: position_and_look.stance_y_0,
+                                stance_y_1: position_and_look.stance_y_1,
+                                z: position_and_look.z,
+                                yaw: position_and_look.yaw,
+                                pitch: position_and_look.pitch,
+                                on_ground: position_and_look.on_ground,
+                            }),
+                        )
+                        .await
                         .unwrap();
-
-                        debug!(
-                            "Sending player position and look packet: {:?}",
-                            payload.as_ref()
-                        );
-
-                        let payload = KeepAlivePayload { keep_alive_id: 1 }.to_bytes().unwrap();
-
-                        trace!("Sending keep alive packet: {:?}", payload.as_ref());
-
-                        socket
-                            .write_all(payload.as_ref())
-                            .await
-                            .expect("Failed to write data to socket");
                     }
                     _ => error!("Unhandled packet type"),
                 }
