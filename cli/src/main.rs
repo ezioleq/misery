@@ -6,7 +6,9 @@ mod config;
 
 #[tokio::main]
 async fn main() {
-    env_logger::init();
+    env_logger::builder()
+        .filter_level(log::LevelFilter::Info)
+        .init();
 
     let config = Config::parse();
     debug!("Arguments: {:?}", config);
