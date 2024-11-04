@@ -18,6 +18,8 @@ const ENTITY_EQUIPMENT_PACKET_ID: u8 = 0x05;
 const SPAWN_POSITION_PACKET_ID: u8 = 0x06;
 /// Player position and look packet identifier.
 const PLAYER_POSITION_AND_LOOK_PACKET_ID: u8 = 0x0D;
+/// Chunk allocation packet identifier.
+const CHUNK_ALLOCATION_PACKET_ID: u8 = 0x32;
 /// Server list ping packet identifier.
 const SERVER_LIST_PING_PACKET_ID: u8 = 0xFE;
 /// Disconnect/Kick packet identifier.
@@ -50,6 +52,9 @@ pub enum Packet {
     /// Two-way, Player position and look packet.
     PlayerPositionAndLook(PlayerPositionAndLookPayload),
 
+    /// Server to Client, chunk allocation packet.
+    ChunkAllocation(ChunkAllocationPayload),
+
     /// Client to Server, Server List Ping packet.
     ServerListPing(ServerListPingPayload),
 
@@ -70,10 +75,6 @@ impl Packet {
             LOGIN_REQUEST_PACKET_ID => {
                 let payload = LoginRequestPayload::from_bytes(&mut cursor)?;
                 Ok(Packet::LoginRequest(payload))
-            }
-            DISCONNECT_KICK_PACKET_ID => {
-                let payload = DisconnectKickPayload::from_bytes(&mut cursor)?;
-                Ok(Packet::DisconnectKick(payload))
             }
             HANDSHAKE_PACKET_ID => {
                 let payload = HandshakePayload::from_bytes(&mut cursor)?;
@@ -99,9 +100,17 @@ impl Packet {
                 let payload = PlayerPositionAndLookPayload::from_bytes(&mut cursor)?;
                 Ok(Packet::PlayerPositionAndLook(payload))
             }
+            CHUNK_ALLOCATION_PACKET_ID => {
+                let payload = ChunkAllocationPayload::from_bytes(&mut cursor)?;
+                Ok(Packet::ChunkAllocation(payload))
+            }
             SERVER_LIST_PING_PACKET_ID => {
                 let payload = ServerListPingPayload::from_bytes(&mut cursor)?;
                 Ok(Packet::ServerListPing(payload))
+            }
+            DISCONNECT_KICK_PACKET_ID => {
+                let payload = DisconnectKickPayload::from_bytes(&mut cursor)?;
+                Ok(Packet::DisconnectKick(payload))
             }
             _ => Err(io::Error::new(
                 io::ErrorKind::InvalidData,
@@ -144,6 +153,10 @@ impl Packet {
             }
             Packet::PlayerPositionAndLook(payload) => {
                 buffer.put_u8(PLAYER_POSITION_AND_LOOK_PACKET_ID);
+                payload.to_bytes(&mut buffer)?;
+            }
+            Packet::ChunkAllocation(payload) => {
+                buffer.put_u8(CHUNK_ALLOCATION_PACKET_ID);
                 payload.to_bytes(&mut buffer)?;
             }
             Packet::ServerListPing(_) => {
@@ -551,6 +564,42 @@ impl ToBytes for PlayerPositionAndLookPayload {
 }
 
 //
+// Chunk allocation packet.
+//
+
+/// Payload for the `Packet::ChunkAllocation`.
+#[derive(Debug, PartialEq)]
+pub struct ChunkAllocationPayload {
+    /// Chunk X coordinate.
+    pub x: i32,
+
+    /// Chunk Z coordinate.
+    pub z: i32,
+
+    /// Mode, 0 for unloading and 1 for initializing a chunk.
+    pub mode: u8,
+}
+
+impl FromBytes for ChunkAllocationPayload {
+    fn from_bytes(bytes: &mut Cursor<&[u8]>) -> io::Result<Self> {
+        Ok(Self {
+            x: bytes.get_i32(),
+            z: bytes.get_i32(),
+            mode: bytes.get_u8(),
+        })
+    }
+}
+
+impl ToBytes for ChunkAllocationPayload {
+    fn to_bytes(&self, buffer: &mut BytesMut) -> io::Result<()> {
+        buffer.put_i32(self.x);
+        buffer.put_i32(self.z);
+        buffer.put_u8(self.mode);
+        Ok(())
+    }
+}
+
+//
 // Server list ping packet
 //
 
@@ -903,6 +952,24 @@ mod tests {
                 0x00, 0x00, 0x00, 0x00, 0x00, 0xC3, 0x34, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
             ]
         );
+    }
+
+    #[test]
+    fn encode_decode_chunk_allocation_packet() {
+        let packet = Packet::ChunkAllocation(ChunkAllocationPayload {
+            x: -9,
+            z: 12,
+            mode: 1,
+        });
+
+        let data = packet.to_bytes().unwrap();
+        let decoded = Packet::from_bytes(&data).unwrap();
+
+        assert_eq!(packet, decoded);
+        assert_eq!(
+            data,
+            &[0x32, 0xFF, 0xFF, 0xFF, 0xF7, 0x00, 0x00, 0x00, 0x0C, 0x01]
+        )
     }
 
     #[test]
