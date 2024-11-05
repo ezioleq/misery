@@ -16,6 +16,8 @@ const TIME_UPDATE_PACKET_ID: u8 = 0x04;
 const ENTITY_EQUIPMENT_PACKET_ID: u8 = 0x05;
 /// Spawn position packet identifier.
 const SPAWN_POSITION_PACKET_ID: u8 = 0x06;
+/// Player position packet identifier.
+const PLAYER_POSITION_PACKET_ID: u8 = 0x0B;
 /// Player position and look packet identifier.
 const PLAYER_POSITION_AND_LOOK_PACKET_ID: u8 = 0x0D;
 /// Chunk allocation packet identifier.
@@ -48,6 +50,9 @@ pub enum Packet {
 
     /// Server to Client, spawn position packet.
     SpawnPosition(SpawnPositionPayload),
+
+    /// Client to Server, player position packet.
+    PlayerPosition(PlayerPositionPayload),
 
     /// Two-way, Player position and look packet.
     PlayerPositionAndLook(PlayerPositionAndLookPayload),
@@ -95,6 +100,10 @@ impl Packet {
             SPAWN_POSITION_PACKET_ID => {
                 let payload = SpawnPositionPayload::from_bytes(&mut cursor)?;
                 Ok(Packet::SpawnPosition(payload))
+            }
+            PLAYER_POSITION_PACKET_ID => {
+                let payload = PlayerPositionPayload::from_bytes(&mut cursor)?;
+                Ok(Packet::PlayerPosition(payload))
             }
             PLAYER_POSITION_AND_LOOK_PACKET_ID => {
                 let payload = PlayerPositionAndLookPayload::from_bytes(&mut cursor)?;
@@ -149,6 +158,10 @@ impl Packet {
             }
             Packet::SpawnPosition(payload) => {
                 buffer.put_u8(SPAWN_POSITION_PACKET_ID);
+                payload.to_bytes(&mut buffer)?;
+            }
+            Packet::PlayerPosition(payload) => {
+                buffer.put_u8(PLAYER_POSITION_PACKET_ID);
                 payload.to_bytes(&mut buffer)?;
             }
             Packet::PlayerPositionAndLook(payload) => {
@@ -495,6 +508,52 @@ impl ToBytes for SpawnPositionPayload {
         buffer.put_i32(self.x);
         buffer.put_i32(self.y);
         buffer.put_i32(self.z);
+        Ok(())
+    }
+}
+
+//
+// Player position packet
+//
+
+/// Payload for the `Packet::PlayerPosition`.
+#[derive(Debug, PartialEq)]
+pub struct PlayerPositionPayload {
+    /// Absolute X position.
+    pub x: f64,
+
+    /// Absolute Y position.
+    pub y: f64,
+
+    /// Stance used to modify the player's bounding box.
+    pub stance: f64,
+
+    /// Absolute Z position.
+    pub z: f64,
+
+    /// Whether the client is on the ground.
+    pub on_ground: u8,
+}
+
+impl FromBytes for PlayerPositionPayload {
+    fn from_bytes(bytes: &mut Cursor<&[u8]>) -> io::Result<Self> {
+        Ok(Self {
+            x: bytes.get_f64(),
+            y: bytes.get_f64(),
+            stance: bytes.get_f64(),
+            z: bytes.get_f64(),
+            on_ground: bytes.get_u8(),
+        })
+    }
+}
+
+impl ToBytes for PlayerPositionPayload {
+    fn to_bytes(&self, buffer: &mut BytesMut) -> io::Result<()> {
+        buffer.put_f64(self.x);
+        buffer.put_f64(self.y);
+        buffer.put_f64(self.stance);
+        buffer.put_f64(self.z);
+        buffer.put_u8(self.on_ground);
         Ok(())
     }
 }
@@ -906,10 +965,33 @@ mod tests {
     }
 
     #[test]
+    fn decode_player_position_packet() {
+        let packet = Packet::PlayerPosition(PlayerPositionPayload {
+            x: 8.5,
+            y: 65.0,
+            stance: 66.62000000476837,
+            z: 8.5,
+            on_ground: 0,
+        });
+
+        let bytes = packet.to_bytes().unwrap();
+
+        assert_eq!(
+            bytes,
+            &[
+                0x0B, 0x40, 0x21, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x50, 0x40, 0x00, 0x00,
+                0x00, 0x00, 0x00, 0x40, 0x50, 0xA7, 0xAE, 0x14, 0x80, 0x00, 0x00, 0x40, 0x21, 0x00,
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            ]
+        );
+    }
+
+    #[test]
     fn decode_player_position_and_look_packet() {
         let data: &[u8] = &[
-            0x0D, 64, 33, 0, 0, 0, 0, 0, 0, 64, 80, 64, 0, 0, 0, 0, 0, 64, 80, 167, 174, 20, 128,
-            0, 0, 64, 33, 0, 0, 0, 0, 0, 0, 195, 52, 0, 0, 0, 0, 0, 0, 0,
+            0x0D, 0x40, 0x21, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x50, 0x40, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x40, 0x50, 0xA7, 0xAE, 0x14, 0x80, 0x00, 0x00, 0x40, 0x21, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0xC3, 0x34, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         ];
 
         let packet = Packet::from_bytes(data).unwrap();
@@ -926,8 +1008,6 @@ mod tests {
                 on_ground: 0
             })
         );
-
-        println!("{:?}", packet)
     }
 
     #[test]
